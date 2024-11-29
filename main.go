@@ -7,8 +7,9 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/ysicing/nezha-exporter/collector"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 var port int

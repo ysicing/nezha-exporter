@@ -26,6 +26,57 @@ var (
 		},
 		[]string{"name", "tag", "id", "private", "type"}, // type: used, total
 	)
+	load = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "nezha",
+			Name:      "load",
+			Help:      "Load",
+		},
+		[]string{"name", "tag", "id", "private", "type"}, // type: used, total
+	)
+	cpu = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "nezha",
+			Name:      "cpu",
+			Help:      "CPU",
+		},
+		[]string{"name", "tag", "id", "private"},
+	)
+	disk = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "nezha",
+			Name:      "disk",
+			Help:      "Disk",
+		},
+		[]string{"name", "tag", "id", "private", "type"}, // type: used, total
+	)
+
+	network = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "nezha",
+			Name:      "network",
+			Help:      "Network",
+		},
+		[]string{"name", "tag", "id", "private", "type"}, // type: in, out
+	)
+
+	networkSpeed = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "nezha",
+			Name:      "network_speed",
+			Help:      "Network Speed",
+		},
+		[]string{"name", "tag", "id", "private", "type"}, // type: in, out
+	)
+
+	count = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "nezha",
+			Name:      "count",
+			Help:      "count",
+		},
+		[]string{"name", "tag", "id", "private", "type"}, // type: tcp, udp, process
+	)
 )
 
 type CollectConfig struct {
@@ -34,7 +85,7 @@ type CollectConfig struct {
 }
 
 func init() {
-	prometheus.MustRegister(serverStatus, memory)
+	prometheus.MustRegister(serverStatus, memory, load, cpu, disk, network, networkSpeed, count)
 }
 
 func Start(config CollectConfig) {
@@ -129,8 +180,37 @@ func Collect(config CollectConfig) error {
 			ipv6 = false
 		}
 		serverStatus.WithLabelValues(server.Name, tag, fmt.Sprintf("%d", server.ID), server.Host.Version, fmt.Sprintf("%t", server.HideForGuest), fmt.Sprintf("%t", ipv4), fmt.Sprintf("%t", ipv6)).Set(1)
-		memory.WithLabelValues(server.Name, tag, fmt.Sprintf("%d", server.ID), fmt.Sprintf("%t", server.HideForGuest), "used").Set(float64(server.Status.MemUsed))
-		memory.WithLabelValues(server.Name, tag, fmt.Sprintf("%d", server.ID), fmt.Sprintf("%t", server.HideForGuest), "total").Set(float64(server.Host.MemTotal))
+		memoryUsed := float64(server.Status.MemUsed / 1024.0 / 1024.0)
+		memoryTotal := float64(server.Host.MemTotal / 1024.0 / 1024.0)
+		memoryPercent := memoryUsed / memoryTotal
+		memory.WithLabelValues(server.Name, tag, fmt.Sprintf("%d", server.ID), fmt.Sprintf("%t", server.HideForGuest), "used").Set(memoryUsed)
+		memory.WithLabelValues(server.Name, tag, fmt.Sprintf("%d", server.ID), fmt.Sprintf("%t", server.HideForGuest), "total").Set(memoryTotal)
+		memory.WithLabelValues(server.Name, tag, fmt.Sprintf("%d", server.ID), fmt.Sprintf("%t", server.HideForGuest), "percent").Set(memoryPercent)
+		load.WithLabelValues(server.Name, tag, fmt.Sprintf("%d", server.ID), fmt.Sprintf("%t", server.HideForGuest), "load1").Set(server.Status.Load1)
+		load.WithLabelValues(server.Name, tag, fmt.Sprintf("%d", server.ID), fmt.Sprintf("%t", server.HideForGuest), "load5").Set(server.Status.Load5)
+		load.WithLabelValues(server.Name, tag, fmt.Sprintf("%d", server.ID), fmt.Sprintf("%t", server.HideForGuest), "load15").Set(server.Status.Load15)
+		cpu.WithLabelValues(server.Name, tag, fmt.Sprintf("%d", server.ID), fmt.Sprintf("%t", server.HideForGuest)).Set(server.Status.CPU)
+
+		diskUsed := float64(server.Status.DiskUsed / 1024.0 / 1024.0 / 1024.0)
+		diskTotal := float64(server.Host.DiskTotal / 1024.0 / 1024.0 / 1024.0)
+		diskPercent := diskUsed / diskTotal
+		disk.WithLabelValues(server.Name, tag, fmt.Sprintf("%d", server.ID), fmt.Sprintf("%t", server.HideForGuest), "used").Set(diskUsed)
+		disk.WithLabelValues(server.Name, tag, fmt.Sprintf("%d", server.ID), fmt.Sprintf("%t", server.HideForGuest), "total").Set(diskTotal)
+		disk.WithLabelValues(server.Name, tag, fmt.Sprintf("%d", server.ID), fmt.Sprintf("%t", server.HideForGuest), "percent").Set(diskPercent)
+
+		networkIn := float64(server.Status.NetInTransfer / 1024.0)
+		networkOut := float64(server.Status.NetOutTransfer / 1024.0)
+		network.WithLabelValues(server.Name, tag, fmt.Sprintf("%d", server.ID), fmt.Sprintf("%t", server.HideForGuest), "in").Set(networkIn)
+		network.WithLabelValues(server.Name, tag, fmt.Sprintf("%d", server.ID), fmt.Sprintf("%t", server.HideForGuest), "out").Set(networkOut)
+
+		networkSpeedIn := float64(server.Status.NetInSpeed / 1024.0)
+		networkSpeedOut := float64(server.Status.NetOutSpeed / 1024.0)
+		networkSpeed.WithLabelValues(server.Name, tag, fmt.Sprintf("%d", server.ID), fmt.Sprintf("%t", server.HideForGuest), "in").Set(networkSpeedIn)
+		networkSpeed.WithLabelValues(server.Name, tag, fmt.Sprintf("%d", server.ID), fmt.Sprintf("%t", server.HideForGuest), "out").Set(networkSpeedOut)
+
+		count.WithLabelValues(server.Name, tag, fmt.Sprintf("%d", server.ID), fmt.Sprintf("%t", server.HideForGuest), "tcp").Set(float64(server.Status.TcpConnCount))
+		count.WithLabelValues(server.Name, tag, fmt.Sprintf("%d", server.ID), fmt.Sprintf("%t", server.HideForGuest), "udp").Set(float64(server.Status.UdpConnCount))
+		count.WithLabelValues(server.Name, tag, fmt.Sprintf("%d", server.ID), fmt.Sprintf("%t", server.HideForGuest), "process").Set(float64(server.Status.ProcessCount))
 	}
 	return nil
 }
